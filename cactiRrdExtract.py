@@ -8,10 +8,15 @@ import argparse
 import rrdtool
 import csv
 import time
+from time import strftime
+from datetime import datetime
+import smtplib
+from email.MIMEMultipart import MIMEMultipart
+from email.MIMEBase import MIMEBase
+from email import Encoders
 
 LOGLEVEL=2
 CURPID="-"
-OUTPUT='notset.csv'
 
 def debug(msg):
     if LOGLEVEL>1:
@@ -38,17 +43,17 @@ def log(msg):
     
 def main():
     
-    def addToCsv(name, data):
-        global CURPID, OUTPUT
+    def addToCsv(name, data, filename):
+        global CURPID
         CURPID="addToCsv"
-        f = open(OUTPUT, 'ab')
+        f = open(filename, 'ab')
         writer = csv.writer(f, delimiter=";", doublequote=True, quotechar="'")
         data.insert(0, name)
         writer.writerow(data)
         f.close()
 
-    def writeCsvHeader():
-        global CURPID, OUTPUT
+    def writeCsvHeader(filename):
+        global CURPID
         CURPID="writeCsvHeader"
         header = ['Name',
             'In Average',
@@ -60,10 +65,10 @@ def main():
             'Out 95%',
             'Out Total',
             'In/Out Max 95%',
-            'In/Out Sum 95%',
-            'In/Out Max n95%',
-            'In/Out Sum n95%']
-        f = open(OUTPUT, 'wb')
+            'In/Out Sum 95%',]
+            #'In/Out Max n95%',
+            #'In/Out Sum n95%']
+        f = open(filename, 'wb')
         writer = csv.writer(f, delimiter=";", doublequote=True, quotechar="'")
         writer.writerow(header)
         f.close()
@@ -83,8 +88,6 @@ def main():
         treeId = None
         q = "select `id` from `graph_tree` where `name`='%s'" %treeName
         rows = cur.execute(q)#, cgi.escape(treeName, True))
-        print(q)
-        print(rows)
         treeId = int(cur.fetchone()[0])
         debug("treeId is %s" %treeId)
         return treeId
@@ -222,7 +225,7 @@ def main():
             #values = rrdFilePath
             values = runRrd(rrdFilePath)
             if values:
-                addToCsv(name, values[2])
+                addToCsv(name, values[2], filename)
             
     
     def runRrd(rrdFilePath):
@@ -284,9 +287,27 @@ def main():
             #'PRINT:maxbitspctn:"%lf"' ,
             #'PRINT:sumbitspctn:"%lf"')
         except rrdtool.error, e:
-             print(e)
+             debug("%s" %e)
         else:
              return(ret)    
+    
+    def emailCsv(sender, recipient, filename):
+        subject = "Cacti %s" % filename
+
+        msg = MIMEMultipart()
+        msg['Subject'] = subject 
+        msg['From'] = sender
+        msg['To'] = recipient
+        
+        part = MIMEBase('application', "octet-stream")
+        part.set_payload(open(filename, "rb").read())
+        Encoders.encode_base64(part)
+        
+        part.add_header('Content-Disposition', 'attachment; filename=%s' % filename)
+        msg.attach(part)
+        
+        server = smtplib.SMTP(mailHost)
+        server.sendmail(sender, recipient, msg.as_string())
         
     parser = argparse.ArgumentParser(description='Get monthly values from Cacti tree graph')    
     parser.add_argument("-x", "--month", dest='month', help='month to get data from host', default=1, type=int, nargs='?')
@@ -296,15 +317,23 @@ def main():
     parser.add_argument("-d", "--db", dest='db', help='mysql database', default='cacti', nargs='?')
     parser.add_argument("-v", "--loglevel", dest='logLevel', help='loglevel', default=2, type=int, nargs='?')
     parser.add_argument("-t", "--tree", dest='tree', help='Cacti tree name', default='Default Tree', nargs='?')
-    parser.add_argument("-o", "--output", dest='output', help='output csv file', default='output.csv', nargs='?')
+    parser.add_argument("-s", "--smtp", dest='smtp', help='SMTP server', default='localhost', nargs='?')
+    parser.add_argument("-e", "--email", dest='email', help='Email to address', default='root@localhost', nargs='?')
+    parser.add_argument("-f", "--from", dest='emailFrom', help='Email from address', default='noreply@localhost', nargs='?')
+    #parser.add_argument("-o", "--output", dest='output', help='output csv file', default='output.csv', nargs='?')
     args = parser.parse_args()
 
+    formated_month = datetime(2013, args.month, 1)
+    selected_month = formated_month.strftime("%B")
+    filename = "%s-%s.csv" % (args.tree, selected_month)
+    
     # yes, it's ugly
-    global LOGLEVEL, OUTPUT
+    global LOGLEVEL
     LOGLEVEL = args.logLevel
-    OUTPUT = args.output
+    #OUTPUT = args.output
     startT = int(time.mktime((2013, args.month, 1, 0, 0, 0, 0, 0, 0)))
     endT = int(time.mktime((2013, args.month+1, 1, 0, 0, 0, 0, 0, 0)))
+    mailHost = args.smtp
  
     #start mysql connection
     db = MySQLdb.connect(args.mysql,args.user,args.pwd,args.db)
@@ -312,13 +341,14 @@ def main():
     cur = db.cursor()
     
     treeId = getCactiTreeId(args.tree)
-    writeCsvHeader()
-    print treeId
+    writeCsvHeader(filename)
     parseCactiTree(treeId)
-    
     # disconnect from server
     cur.close()
     db.close()
+
+    emailCsv(args.emailFrom, args.email, filename)
+    
     
 if __name__ == '__main__':
     main()
