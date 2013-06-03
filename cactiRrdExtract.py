@@ -331,7 +331,7 @@ def main():
     args = parser.parse_args()
 
     month = args.month
-    if args.month == 0:
+    if month == 0:
         month = getPrevMonth()
     formated_month = datetime(2013, month, 1)
     selected_month = formated_month.strftime("%B")
@@ -341,8 +341,8 @@ def main():
     global LOGLEVEL
     LOGLEVEL = args.logLevel
     #OUTPUT = args.output
-    startT = int(time.mktime((2013, args.month, 1, 0, 0, 0, 0, 0, 0)))
-    endT = int(time.mktime((2013, args.month+1, 1, 0, 0, 0, 0, 0, 0)))
+    startT = int(time.mktime((2013, month, 1, 0, 0, 0, 0, 0, 0)))
+    endT = int(time.mktime((2013, month+1, 1, 0, 0, 0, 0, 0, 0)))
     mailHost = args.smtp
  
     #start mysql connection
