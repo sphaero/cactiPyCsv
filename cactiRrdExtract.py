@@ -9,7 +9,7 @@ import rrdtool
 import csv
 import time
 from time import strftime
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import smtplib
 from email.MIMEMultipart import MIMEMultipart
 from email.MIMEBase import MIMEBase
@@ -40,6 +40,13 @@ def log(msg):
         print(msg.encode('utf-8'))
     else:
         print(msg)
+
+def getPrevMonth():
+    """
+    return previous month number
+    """
+    now = date.today() - timedelta(days=15)
+    return now.month
     
 def main():
     
@@ -310,7 +317,7 @@ def main():
         server.sendmail(sender, recipient, msg.as_string())
         
     parser = argparse.ArgumentParser(description='Get monthly values from Cacti tree graph')    
-    parser.add_argument("-x", "--month", dest='month', help='month to get data from host', default=1, type=int, nargs='?')
+    parser.add_argument("-x", "--month", dest='month', help='month to get data from host', default=0, type=int, nargs='?')
     parser.add_argument("-m", "--mysql", dest='mysql', help='mysql host', default='127.0.0.1', nargs='?')
     parser.add_argument("-u", "--user", dest='user', help='mysql user', default='cacti', nargs='?')
     parser.add_argument("-p", "--pwd", dest='pwd', help='mysql password', default='sssh', nargs='?')
@@ -323,7 +330,10 @@ def main():
     #parser.add_argument("-o", "--output", dest='output', help='output csv file', default='output.csv', nargs='?')
     args = parser.parse_args()
 
-    formated_month = datetime(2013, args.month, 1)
+    month = args.month
+    if args.month == 0:
+        month = getPrevMonth()
+    formated_month = datetime(2013, month, 1)
     selected_month = formated_month.strftime("%B")
     filename = "%s-%s.csv" % (args.tree, selected_month)
     
